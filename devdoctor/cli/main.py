@@ -40,6 +40,16 @@ def create_parser() -> argparse.ArgumentParser:
         help="Skip test execution (faster, no subprocess)",
     )
     diagnose_parser.add_argument(
+        "--skip-security",
+        action="store_true",
+        help="Skip security and vulnerability scanning",
+    )
+    diagnose_parser.add_argument(
+        "--skip-docker",
+        action="store_true",
+        help="Skip Dockerfile/Compose analysis",
+    )
+    diagnose_parser.add_argument(
         "--ai",
         action="store_true",
         help="Enable AI-powered diagnosis using local Ollama model (requires Ollama running)",
@@ -75,22 +85,28 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_diagnose(path: str, as_json: bool, skip_tests: bool = False, use_ai: bool = False) -> int:
+def run_diagnose(path: str, as_json: bool, skip_tests: bool = False, use_ai: bool = False,
+                 skip_security: bool = False, skip_docker: bool = False) -> int:
     """Run environment + project inspection and print the report."""
     if use_ai:
         return _run_ai_diagnose(path, as_json, skip_tests)
 
     from devdoctor.diagnostics import inspect
     from devdoctor.reporting import format_human, format_json
+    from devdoctor.reporting.audit import audit_event
 
-    result = inspect(path, run_tests=not skip_tests)
+    audit_event("diagnosis_started", project=path,
+                metadata={"mode": "json" if as_json else "human"})
+    result = inspect(path, run_tests=not skip_tests,
+                     run_security=not skip_security, run_docker=not skip_docker)
     if as_json:
         print(format_json(result))
     else:
         print(format_human(result))
-    if result.project.error:
-        return 2
-    return 0
+    exit_code = 2 if result.project.error else 0
+    audit_event("diagnosis_completed", project=path, status="error" if exit_code else "ok",
+                metadata={"exit_code": exit_code})
+    return exit_code
 
 
 def _run_ai_diagnose(path: str, as_json: bool, skip_tests: bool) -> int:
@@ -106,6 +122,10 @@ def _run_ai_diagnose(path: str, as_json: bool, skip_tests: bool) -> int:
         model=model,
         ollama_url=ollama_url,
     )
+    from devdoctor.reporting.audit import audit_event
+
+    audit_event("ai_diagnosis_requested", project=path,
+                metadata={"mode": "json" if as_json else "human"})
     result = diagnose_with_ai(path, config)
     if as_json:
         print(json.dumps(result, indent=2))
@@ -113,7 +133,9 @@ def _run_ai_diagnose(path: str, as_json: bool, skip_tests: bool) -> int:
         _print_ai_diagnosis(result)
     # Return non-zero if diagnosis indicates error
     diag = result.get("diagnosis", {})
-    if diag.get("status") == "error":
+    status = diag.get("status", "unknown")
+    audit_event("ai_diagnosis_completed", project=path, status=status)
+    if status == "error":
         return 1
     return 0
 
@@ -215,7 +237,9 @@ def main(args: list[str] | None = None) -> int:
         return 0
 
     if parsed_args.command == "diagnose":
-        return run_diagnose(parsed_args.path, parsed_args.json, parsed_args.skip_tests, parsed_args.ai)
+        return run_diagnose(parsed_args.path, parsed_args.json, parsed_args.skip_tests,
+                            parsed_args.ai, parsed_args.skip_security,
+                            parsed_args.skip_docker)
 
     if parsed_args.command == "repair":
         return run_repair(parsed_args.path, parsed_args.dry_run, parsed_args.yes, parsed_args.max_cycles)
