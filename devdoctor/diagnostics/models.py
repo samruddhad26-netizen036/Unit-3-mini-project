@@ -113,6 +113,7 @@ class InspectionResult:
     environment: EnvironmentInfo
     project: ProjectInfo
     errors: list[str] = field(default_factory=list)
+    dependencies: DependencyAnalysis | None = None
 
     def to_dict(self) -> dict:
         """Return a JSON-serializable dict."""
@@ -120,4 +121,87 @@ class InspectionResult:
             "environment": self.environment.to_dict(),
             "project": self.project.to_dict(),
             "errors": self.errors,
+            "dependencies": self.dependencies.to_dict() if self.dependencies else None,
+        }
+
+
+@dataclass
+class DeclaredDependency:
+    """A dependency declared by the project (name + raw version constraint)."""
+
+    name: str
+    constraint: str = ""
+    source: str = ""
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {"name": self.name, "constraint": self.constraint, "source": self.source}
+
+
+@dataclass
+class InstalledDependency:
+    """A package installed in the current Python environment."""
+
+    name: str
+    version: str
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {"name": self.name, "version": self.version}
+
+
+@dataclass
+class ImportedPackage:
+    """A top-level import found in project sources with its classification."""
+
+    name: str
+    classification: str = "third-party"  # stdlib | third-party | local
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {"name": self.name, "classification": self.classification}
+
+
+@dataclass
+class DependencyIssue:
+    """A single detected dependency problem."""
+
+    kind: str  # missing | declared-not-installed | imported-not-declared |
+    #            possibly-unused | version-mismatch
+    name: str
+    detail: str = ""
+    declared: str | None = None
+    installed: str | None = None
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "kind": self.kind,
+            "name": self.name,
+            "detail": self.detail,
+            "declared": self.declared,
+            "installed": self.installed,
+        }
+
+
+@dataclass
+class DependencyAnalysis:
+    """Declared vs installed vs imported comparison for a project."""
+
+    declared: list[DeclaredDependency] = field(default_factory=list)
+    installed: list[InstalledDependency] = field(default_factory=list)
+    imports: list[ImportedPackage] = field(default_factory=list)
+    issues: list[DependencyIssue] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    skipped: str | None = None
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "declared": [d.to_dict() for d in self.declared],
+            "installed": [i.to_dict() for i in self.installed],
+            "imports": [i.to_dict() for i in self.imports],
+            "issues": [i.to_dict() for i in self.issues],
+            "notes": self.notes,
+            "skipped": self.skipped,
         }

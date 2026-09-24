@@ -8,12 +8,13 @@ DevDoctor is a tool designed to help developers diagnose and fix Python environm
 
 ## Current Status
 
-**Phase 2 - Environment & Project Inspection Complete**
-- Deterministic, read-only inspection layer (no LLM, no modifications)
-- Environment inspection: OS, architecture, Python/pip, virtualenv, git, docker
-- Project inspection: layout markers, Python/test files, `.env` files, git status, bounded tree
-- Python source inspection via stdlib AST (file/line counts, top-level imports)
-- `devdoctor diagnose <path>` with human-readable and `--json` output
+**Phase 3 - Dependency Intelligence Complete**
+- Deterministic, read-only declared ↔ installed ↔ imported comparison (no LLM)
+- Declared parsing: `requirements.txt`, PEP 621 `pyproject.toml`, `setup.cfg`, static `setup.py`
+- Installed packages via `importlib.metadata`; imports classified stdlib/third-party/local
+- Issue detection: missing, declared-not-installed, imported-not-declared,
+  possibly-unused, version-mismatch (safe numeric constraints only)
+- `devdoctor diagnose <path>` shows a DEPENDENCIES section; `--json` carries full data
 
 ## Installation
 
