@@ -139,6 +139,13 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
             message="; ".join(message_parts) if message_parts else "No significant change",
         )
 
+    def _audit(self, event: str, status: str = "", metadata: dict | None = None) -> None:
+        """Emit an audit event (never raises; no-op when auditing is disabled)."""
+        from devdoctor.reporting.audit import audit_event
+
+        audit_event(event, project=str(self.project_path), status=status,
+                    metadata=metadata or {})
+
     def _execute_action(self, action: RepairAction) -> RepairResult:
         """Execute a single repair action."""
         tool_func = get_repair_tool(action.action)
@@ -237,10 +244,13 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
                     if not validate_package_name(action.package):
                         raise ValueError(f"Invalid package name: {action.package}")
 
-                return RepairPlan(
+                plan = RepairPlan(
                     actions=actions,
                     reasoning=plan_data.get("reasoning", ""),
                 )
+                self._audit("repair_plan_generated", status="ok",
+                            metadata={"actions": len(actions)})
+                return plan
         except (json.JSONDecodeError, ValueError, KeyError) as exc:
             raise OllamaError(f"Invalid repair plan from model: {exc}")
 
@@ -266,6 +276,10 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
             print(f"\nExecuting: {action.action} {action.package}" + (f"=={action.version}" if action.version else ""))
             result = self._execute_action(action)
             self.report.actions_attempted.append(result)
+            self._audit("repair_action",
+                        status="ok" if result.success else "failed",
+                        metadata={"action": action.action, "package": action.package,
+                                  "version": action.version})
 
             if not result.success:
                 print(f"  FAILED: {result.error}")
@@ -282,6 +296,9 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
         print("\nVerifying repair...")
         verification = self._verify_repair(before_state)
         self.report.verification = verification
+        self._audit("verification_result",
+                    status="success" if verification.success else "failed",
+                    metadata={"message": verification.message})
 
         if verification.success:
             print(f"VERIFICATION: SUCCESS - {verification.message}")
@@ -298,11 +315,16 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
             self.report.rollback_performed = True
             self.report.rollback_success = True
             self.report.status = "rolled-back"
+            self._audit("rollback_result", status="success",
+                        metadata={"restored_files": 0})
             return True
 
         print("\nRolling back changes...")
         self.report.rollback_performed = True
         restored = self.snapshot.restore()
+        self._audit("rollback_result",
+                    status="success" if restored else "failed",
+                    metadata={"restored_files": len(restored)})
 
         if restored:
             print(f"Restored {len(restored)} files")
@@ -381,8 +403,13 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
             # Phase 2: Confirmation
             if not self._get_user_confirmation(plan):
                 self.report.status = "cancelled"
+                self._audit("repair_cancelled", status="cancelled",
+                            metadata={"actions": len(plan.actions)})
                 print("Repair cancelled.")
                 return self.report
+            self._audit("repair_approved", status="ok",
+                        metadata={"actions": len(plan.actions),
+                                  "dry_run": self.config.dry_run})
 
             # Phase 3: Repair cycles with re-planning
             for cycle in range(self.config.max_repair_cycles):

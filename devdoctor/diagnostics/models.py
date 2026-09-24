@@ -115,6 +115,9 @@ class InspectionResult:
     errors: list[str] = field(default_factory=list)
     dependencies: DependencyAnalysis | None = None
     tests: TestRun | None = None
+    security: SecurityAnalysis | None = None
+    vulnerabilities: VulnAnalysis | None = None
+    docker: DockerAnalysis | None = None
 
     def to_dict(self) -> dict:
         """Return a JSON-serializable dict."""
@@ -124,6 +127,9 @@ class InspectionResult:
             "errors": self.errors,
             "dependencies": self.dependencies.to_dict() if self.dependencies else None,
             "tests": self.tests.to_dict() if self.tests else None,
+            "security": self.security.to_dict() if self.security else None,
+            "vulnerabilities": self.vulnerabilities.to_dict() if self.vulnerabilities else None,
+            "docker": self.docker.to_dict() if self.docker else None,
         }
 
 
@@ -271,6 +277,138 @@ class TestResult:
             "failures": [f.to_dict() for f in self.failures],
             "failures_omitted": self.failures_omitted,
             "notes": self.notes,
+        }
+
+
+@dataclass
+class SecurityFinding:
+    """A single static-analysis security finding (values redacted)."""
+
+    rule_id: str
+    severity: str  # critical | high | medium | low
+    title: str
+    file: str | None = None
+    line: int | None = None
+    evidence: str = ""
+    recommendation: str = ""
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "rule_id": self.rule_id,
+            "severity": self.severity,
+            "title": self.title,
+            "file": self.file,
+            "line": self.line,
+            "evidence": self.evidence,
+            "recommendation": self.recommendation,
+        }
+
+
+@dataclass
+class SecurityAnalysis:
+    """Result of the read-only static security scan."""
+
+    findings: list[SecurityFinding] = field(default_factory=list)
+    files_scanned: int = 0
+    notes: list[str] = field(default_factory=list)
+    skipped: str | None = None
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "findings": [f.to_dict() for f in self.findings],
+            "files_scanned": self.files_scanned,
+            "notes": self.notes,
+            "skipped": self.skipped,
+        }
+
+
+@dataclass
+class Vulnerability:
+    """A single dependency vulnerability reported by pip-audit."""
+
+    package: str
+    installed_version: str = ""
+    vuln_id: str = ""
+    aliases: list[str] = field(default_factory=list)
+    fix_versions: list[str] = field(default_factory=list)
+    description: str = ""
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "package": self.package,
+            "installed_version": self.installed_version,
+            "vuln_id": self.vuln_id,
+            "aliases": self.aliases,
+            "fix_versions": self.fix_versions,
+            "description": self.description,
+        }
+
+
+@dataclass
+class VulnAnalysis:
+    """Result of the optional local pip-audit scan."""
+
+    vulnerabilities: list[Vulnerability] = field(default_factory=list)
+    pip_audit_version: str | None = None
+    notes: list[str] = field(default_factory=list)
+    skipped: str | None = None
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "vulnerabilities": [v.to_dict() for v in self.vulnerabilities],
+            "pip_audit_version": self.pip_audit_version,
+            "notes": self.notes,
+            "skipped": self.skipped,
+        }
+
+
+@dataclass
+class DockerFinding:
+    """A single Dockerfile/Compose configuration finding."""
+
+    severity: str  # critical | high | medium | low
+    title: str
+    location: str = ""
+    evidence: str = ""
+    recommendation: str = ""
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "severity": self.severity,
+            "title": self.title,
+            "location": self.location,
+            "evidence": self.evidence,
+            "recommendation": self.recommendation,
+        }
+
+
+@dataclass
+class DockerAnalysis:
+    """Result of the read-only Dockerfile/Compose analysis."""
+
+    docker_available: bool = False
+    docker_version: str | None = None
+    dockerfile_found: bool = False
+    compose_files: list[str] = field(default_factory=list)
+    findings: list[DockerFinding] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    skipped: str | None = None
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "docker_available": self.docker_available,
+            "docker_version": self.docker_version,
+            "dockerfile_found": self.dockerfile_found,
+            "compose_files": self.compose_files,
+            "findings": [f.to_dict() for f in self.findings],
+            "notes": self.notes,
+            "skipped": self.skipped,
         }
 
 

@@ -87,6 +87,12 @@ def format_human(result: InspectionResult) -> str:
     lines.extend(_format_dependencies(result))
     lines.append("")
     lines.extend(_format_tests(result))
+    lines.append("")
+    lines.extend(_format_security(result))
+    lines.append("")
+    lines.extend(_format_docker(result))
+    lines.append("")
+    lines.extend(_format_audit(result))
 
     if result.errors:
         lines.append("")
@@ -151,8 +157,126 @@ def _format_dependencies(result: InspectionResult) -> list[str]:
 
 
 def format_json(result: InspectionResult) -> str:
-    """Render the inspection result as indented JSON."""
-    return json.dumps(result.to_dict(), indent=2)
+    """Render the inspection result as indented JSON (plus audit trail)."""
+    payload = result.to_dict()
+    payload["audit"] = _audit_payload(result)
+    return json.dumps(payload, indent=2)
+
+
+MAX_HUMAN_SECURITY_FINDINGS = 10
+MAX_HUMAN_VULNS = 10
+MAX_HUMAN_DOCKER_FINDINGS = 10
+MAX_HUMAN_AUDIT_EVENTS = 5
+
+
+def _format_security(result: InspectionResult) -> list[str]:
+    """Render the SECURITY section (static findings + vulnerabilities)."""
+    lines: list[str] = ["SECURITY", ""]
+    sec = result.security
+    if sec is None or sec.skipped:
+        lines.append(f"  Skipped: {sec.skipped if sec and sec.skipped else 'no data'}")
+    else:
+        lines.append(f"  Files scanned: {sec.files_scanned}")
+        lines.append(f"  Findings: {len(sec.findings)}")
+        for number, finding in enumerate(sec.findings[:MAX_HUMAN_SECURITY_FINDINGS], start=1):
+            where = finding.file or ""
+            if finding.line is not None:
+                where += f":{finding.line}"
+            lines.append(f"  {number}. [{finding.severity.upper()}] {finding.rule_id} {finding.title}"
+                         + (f" ({where})" if where else ""))
+            if finding.evidence:
+                lines.append(f"     Evidence: {finding.evidence}")
+            if finding.recommendation:
+                lines.append(f"     Fix: {finding.recommendation}")
+        omitted = len(sec.findings) - MAX_HUMAN_SECURITY_FINDINGS
+        if omitted > 0:
+            lines.append(f"  ... ({omitted} more findings, see JSON output)")
+        if sec.notes:
+            lines.append("  Notes:")
+            for note in sec.notes:
+                lines.append(f"    - {note}")
+    lines.append("")
+    vulns = result.vulnerabilities
+    if vulns is None or vulns.skipped:
+        lines.append("  Vulnerabilities: "
+                     + (vulns.skipped if vulns and vulns.skipped else "no data"))
+    else:
+        lines.append(f"  Vulnerabilities (pip-audit {vulns.pip_audit_version or 'unknown'}): "
+                     f"{len(vulns.vulnerabilities)}")
+        for vuln in vulns.vulnerabilities[:MAX_HUMAN_VULNS]:
+            fixed = f" (fix: {', '.join(vuln.fix_versions)})" if vuln.fix_versions else ""
+            lines.append(f"    {vuln.package} {vuln.installed_version}: "
+                         f"{vuln.vuln_id or 'unknown id'}{fixed}")
+        omitted = len(vulns.vulnerabilities) - MAX_HUMAN_VULNS
+        if omitted > 0:
+            lines.append(f"    ... ({omitted} more, see JSON output)")
+        if vulns.notes:
+            lines.append("  Vuln notes:")
+            for note in vulns.notes:
+                lines.append(f"    - {note}")
+    return lines
+
+
+def _format_docker(result: InspectionResult) -> list[str]:
+    """Render the DOCKER section of the human-readable report."""
+    lines: list[str] = ["DOCKER", ""]
+    dock = result.docker
+    if dock is None or dock.skipped:
+        lines.append(f"  Skipped: {dock.skipped if dock and dock.skipped else 'no data'}")
+        return lines
+    if dock.docker_available:
+        lines.append(f"  Engine: {dock.docker_version or 'available'}")
+    else:
+        lines.append("  Engine: unavailable")
+    lines.append(f"  Dockerfile: {'found' if dock.dockerfile_found else 'not found'}")
+    lines.append(f"  Compose: {', '.join(dock.compose_files) if dock.compose_files else 'none'}")
+    lines.append(f"  Findings: {len(dock.findings)}")
+    for number, finding in enumerate(dock.findings[:MAX_HUMAN_DOCKER_FINDINGS], start=1):
+        lines.append(f"  {number}. [{finding.severity.upper()}] {finding.title}"
+                     + (f" ({finding.location})" if finding.location else ""))
+        if finding.evidence:
+            lines.append(f"     Evidence: {finding.evidence}")
+        if finding.recommendation:
+            lines.append(f"     Fix: {finding.recommendation}")
+    omitted = len(dock.findings) - MAX_HUMAN_DOCKER_FINDINGS
+    if omitted > 0:
+        lines.append(f"  ... ({omitted} more findings, see JSON output)")
+    if dock.notes:
+        lines.append("  Notes:")
+        for note in dock.notes:
+            lines.append(f"    - {note}")
+    return lines
+
+
+def _audit_payload(result: InspectionResult) -> dict:
+    """Build the audit-trail payload (log path + recent events for the project)."""
+    from devdoctor.reporting.audit import audit_log_path, read_audit_events
+
+    try:
+        log_path = str(audit_log_path())
+    except (OSError, ValueError):
+        log_path = "unavailable"
+    try:
+        recent = read_audit_events(result.project.path, limit=MAX_HUMAN_AUDIT_EVENTS)
+    except (OSError, ValueError):
+        recent = []
+    return {"log": log_path, "recent_events": recent}
+
+
+def _format_audit(result: InspectionResult) -> list[str]:
+    """Render the AUDIT section of the human-readable report."""
+    lines: list[str] = ["AUDIT", ""]
+    payload = _audit_payload(result)
+    lines.append(f"  Log: {payload['log']}")
+    recent = payload["recent_events"]
+    if not recent:
+        lines.append("  No audit history for this project.")
+        return lines
+    lines.append(f"  Recent events: {len(recent)}")
+    for event in recent:
+        lines.append(f"    {event.get('timestamp', '?')} "
+                     f"{event.get('event', '?')} {event.get('status', '')}".rstrip())
+    return lines
 
 
 def _format_tests(result: InspectionResult) -> list[str]:

@@ -8,7 +8,7 @@ DevDoctor is a tool designed to help developers diagnose and fix Python environm
 
 ## Current Status
 
-**Phase 6 - Safe Autonomous Repair Complete**
+**Phase 7 - Security + Docker + Audit + Reporting Complete**
 - Deterministic, read-only declared ↔ installed ↔ imported comparison (no LLM)
 - Declared parsing: `requirements.txt`, PEP 621 `pyproject.toml`, `setup.cfg`, static `setup.py`
 - Installed packages via `importlib.metadata`; imports classified stdlib/third-party/local
@@ -51,6 +51,9 @@ devdoctor diagnose ./my-project --ai
 
 # Skip test execution for faster deterministic diagnosis
 devdoctor diagnose ./my-project --skip-tests
+
+# Skip security/vulnerability scanning or Docker analysis
+devdoctor diagnose ./my-project --skip-security --skip-docker
 
 # Preview repairs without making changes
 devdoctor repair ./my-project --dry-run
@@ -174,6 +177,41 @@ devdoctor repair ./my-project --yes
 - Snapshot of `requirements.txt`/venv markers is taken before changes; failed repairs roll back
 - Verification re-runs inspection, dependency analysis, and tests; at most 3 repair cycles
 - The deterministic `diagnose` command stays fully read-only
+
+## Security, Docker & Audit (Phase 7)
+
+Deterministic `diagnose` now also reports SECURITY, DOCKER, and AUDIT sections
+(all read-only; no images built, no containers run, no state changed).
+
+### Security analysis
+
+Static AST scan of project Python files detects `eval`/`exec`, `os.system`,
+`subprocess(..., shell=True)`, unsafe `pickle`/`yaml.load`, and hard-coded
+secrets (passwords, API keys, tokens, private keys). Secret values are always
+redacted (`[REDACTED]`); `.env` files are never read.
+
+### Dependency vulnerabilities (optional pip-audit)
+
+If the local `pip-audit` tool is installed, DevDoctor runs it
+(`--format json`, fixed args, timeout, bounded output) and reports structured
+vulnerabilities. If absent, the report says `pip-audit unavailable` and
+everything else works normally. Nothing is ever installed automatically.
+
+### Docker analysis
+
+Reads `Dockerfile`, `docker-compose.yml`, `compose.yml` and flags e.g.
+`:latest` base images, missing `USER`, broad `COPY .`, embedded secrets,
+privileged containers, host networking, Docker-socket mounts, dangerous host
+mounts, and inline credentials (all redacted). Reports whether the Docker
+engine is available.
+
+### Audit logging
+
+Important events (diagnosis, scans, repair lifecycle, verification, rollback)
+append to `~/.devdoctor/audit.jsonl` (override: `DEVDOCTOR_AUDIT_LOG`;
+disable: `DEVDOCTOR_AUDIT_DISABLED=1`). Records hold timestamp, event,
+project, status, and bounded secret-free metadata only — never secrets,
+`.env` contents, environment variables, or model responses.
 
 ## Development
 
