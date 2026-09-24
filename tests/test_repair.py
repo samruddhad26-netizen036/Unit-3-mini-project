@@ -8,10 +8,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
-import devdoctor.agent.repair_agent as repair_agent
-import devdoctor.agent.repair_tools as repair_tools
 from devdoctor.agent import (
     RepairAction,
     RepairAgent,
@@ -21,6 +18,8 @@ from devdoctor.agent import (
     get_repair_tool,
     is_valid_repair_action,
     is_within_project,
+    repair_agent,
+    repair_tools,
     validate_package_name,
     validate_version,
 )
@@ -220,7 +219,7 @@ def test_confirmation_accepts_explicit_yes(tmp_path: Path, monkeypatch) -> None:
     agent = _agent(root)
     plan = RepairPlan(actions=[RepairAction(action="install_package", package="x")])
     for answer in ("y", "yes", "Y", "YES"):
-        monkeypatch.setattr("builtins.input", lambda *a, **k: answer)
+        monkeypatch.setattr("builtins.input", lambda *a, answer=answer, **k: answer)
         assert agent._get_user_confirmation(plan) is True
 
 
@@ -230,7 +229,7 @@ def test_confirmation_rejects_anything_else(tmp_path: Path, monkeypatch) -> None
     agent = _agent(root)
     plan = RepairPlan(actions=[RepairAction(action="install_package", package="x")])
     for answer in ("", "n", "no", "yess"):
-        monkeypatch.setattr("builtins.input", lambda *a, **k: answer)
+        monkeypatch.setattr("builtins.input", lambda *a, answer=answer, **k: answer)
         assert agent._get_user_confirmation(plan) is False
     monkeypatch.setattr("builtins.input", lambda *a, **k: (_ for _ in ()).throw(EOFError))
     assert agent._get_user_confirmation(plan) is False

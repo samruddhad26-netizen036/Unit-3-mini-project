@@ -7,14 +7,12 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from devdoctor.agent.core import Agent, AgentConfig
 from devdoctor.agent.ollama import OllamaClient, OllamaError
 from devdoctor.agent.repair_models import (
-    REPAIR_STATUSES,
     RepairAction,
     RepairPlan,
     RepairReport,
@@ -23,8 +21,11 @@ from devdoctor.agent.repair_models import (
     VerificationResult,
     is_valid_repair_action,
 )
-from devdoctor.agent.repair_tools import REPAIR_TOOL_SCHEMAS
-from devdoctor.agent.repair_tools import REPAIR_TOOLS, get_repair_tool, validate_package_name
+from devdoctor.agent.repair_tools import (
+    REPAIR_TOOL_SCHEMAS,
+    get_repair_tool,
+    validate_package_name,
+)
 from devdoctor.diagnostics import inspect
 
 
@@ -150,7 +151,7 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
 
         try:
             return tool_func(self.project_path, action, self.snapshot)
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError) as exc:
             return RepairResult(
                 action=action,
                 success=False,
@@ -345,7 +346,7 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
         ]
 
         def _base(name: str) -> str:
-            return name[:-7] if name.endswith(":latest") else name
+            return name.removesuffix(":latest")
 
         want = self.client.model
         if any(_base(entry) == _base(want) for entry in models):

@@ -8,7 +8,7 @@ DevDoctor is a tool designed to help developers diagnose and fix Python environm
 
 ## Current Status
 
-**Phase 5 - Local LLM Agent Complete**
+**Phase 6 - Safe Autonomous Repair Complete**
 - Deterministic, read-only declared ↔ installed ↔ imported comparison (no LLM)
 - Declared parsing: `requirements.txt`, PEP 621 `pyproject.toml`, `setup.cfg`, static `setup.py`
 - Installed packages via `importlib.metadata`; imports classified stdlib/third-party/local
@@ -52,8 +52,14 @@ devdoctor diagnose ./my-project --ai
 # Skip test execution for faster deterministic diagnosis
 devdoctor diagnose ./my-project --skip-tests
 
-# Repair (not yet implemented)
-devdoctor repair
+# Preview repairs without making changes
+devdoctor repair ./my-project --dry-run
+
+# Repair with explicit confirmation
+devdoctor repair ./my-project
+
+# Repair without prompting (use with caution)
+devdoctor repair ./my-project --yes
 ```
 
 ## AI Mode (Phase 5)
@@ -129,6 +135,45 @@ Problems Found:
        - pandas absent from installed packages
        - tests fail with ModuleNotFoundError: pandas
 ```
+
+## Repair Mode (Phase 6)
+
+Repair mode extends the AI agent so it can fix a limited set of
+environment/dependency problems. Workflow:
+
+**Diagnose → Plan → Confirm → Snapshot → Repair → Test → Verify → Re-plan**
+
+### Supported repairs
+
+- Create a virtual environment (`.venv`) inside the project
+- Install a specific package/version
+- Upgrade / downgrade a package
+- Remove a package flagged as possibly unused
+- Update `requirements.txt` when justified by the repair
+
+Source-code modification is NOT supported.
+
+### Dry-run and confirmation
+
+```bash
+# Show the proposed plan, change nothing
+devdoctor repair ./my-project --dry-run
+
+# Ask before changing anything (default; empty input cancels)
+devdoctor repair ./my-project
+
+# Skip the prompt (explicit opt-in only)
+devdoctor repair ./my-project --yes
+```
+
+### Safety restrictions
+
+- The model only selects actions from a fixed registry; it never runs shell commands
+- Package/environment names and versions are validated; paths are confined to the target project
+- Operations target the project's interpreter (project `.venv` when present)
+- Snapshot of `requirements.txt`/venv markers is taken before changes; failed repairs roll back
+- Verification re-runs inspection, dependency analysis, and tests; at most 3 repair cycles
+- The deterministic `diagnose` command stays fully read-only
 
 ## Development
 

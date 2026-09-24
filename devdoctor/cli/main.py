@@ -149,7 +149,6 @@ def _print_ai_diagnosis(result: dict) -> None:
 def run_repair(path: str, dry_run: bool = False, auto_approve: bool = False, max_cycles: int = 3) -> int:
     """Run AI-powered repair on a project."""
     import os
-    import json
 
     from devdoctor.agent import RepairAgent, RepairConfig
 

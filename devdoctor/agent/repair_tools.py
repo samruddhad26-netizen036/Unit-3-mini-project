@@ -6,8 +6,8 @@ No arbitrary shell commands - only controlled subprocess calls.
 
 from __future__ import annotations
 
+import contextlib
 import re
-import shutil
 import subprocess
 import sys
 import venv
@@ -20,7 +20,6 @@ from devdoctor.agent.repair_models import (
     is_valid_repair_action,
     validate_package_name,
 )
-
 
 # Version pattern: allow basic semver-like strings
 VERSION_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._+-]*$")
@@ -162,9 +161,9 @@ def install_package(project_path: Path, action: RepairAction, snapshot: Snapshot
             error=f"pip install failed: {proc.stderr.strip() or proc.stdout.strip()}",
         )
 
-    # Update requirements.txt if it exists
+    # Update requirements.txt if it exists (non-fatal if it fails)
     if requirements_path.exists():
-        try:
+        with contextlib.suppress(OSError, UnicodeDecodeError, KeyError):
             # Get installed version
             freeze_proc = run_pip_command(python, ["freeze"], project_path)
             if freeze_proc.returncode == 0:
@@ -191,9 +190,6 @@ def install_package(project_path: Path, action: RepairAction, snapshot: Snapshot
 
                     requirements_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
                     modified_files.append(str(requirements_path))
-        except Exception:
-            # Non-fatal - package installed but requirements update failed
-            pass
 
     return RepairResult(
         action=action,
@@ -230,9 +226,9 @@ def upgrade_package(project_path: Path, action: RepairAction, snapshot: Snapshot
             error=f"pip upgrade failed: {proc.stderr.strip() or proc.stdout.strip()}",
         )
 
-    # Update requirements.txt
+    # Update requirements.txt (non-fatal if it fails)
     if requirements_path.exists():
-        try:
+        with contextlib.suppress(OSError, UnicodeDecodeError, KeyError):
             freeze_proc = run_pip_command(python, ["freeze"], project_path)
             if freeze_proc.returncode == 0:
                 lines = freeze_proc.stdout.strip().splitlines()
@@ -257,8 +253,6 @@ def upgrade_package(project_path: Path, action: RepairAction, snapshot: Snapshot
 
                     requirements_path.write_text("\n".join(req_lines) + "\n", encoding="utf-8")
                     modified_files.append(str(requirements_path))
-        except Exception:
-            pass
 
     return RepairResult(
         action=action,
@@ -321,16 +315,14 @@ def remove_package(project_path: Path, action: RepairAction, snapshot: Snapshot 
             error=f"pip uninstall failed: {proc.stderr.strip() or proc.stdout.strip()}",
         )
 
-    # Remove from requirements.txt
+    # Remove from requirements.txt (non-fatal if it fails)
     if requirements_path.exists():
-        try:
+        with contextlib.suppress(OSError, UnicodeDecodeError):
             content = requirements_path.read_text(encoding="utf-8")
             lines = content.splitlines()
             filtered = [line for line in lines if not line.strip().lower().startswith(action.package.lower())]
             requirements_path.write_text("\n".join(filtered) + "\n", encoding="utf-8")
             modified_files.append(str(requirements_path))
-        except Exception:
-            pass
 
     return RepairResult(
         action=action,
