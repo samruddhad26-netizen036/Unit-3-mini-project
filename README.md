@@ -8,11 +8,12 @@ DevDoctor is a tool designed to help developers diagnose and fix Python environm
 
 ## Current Status
 
-**Phase 1 - Foundation Complete**
-- Project structure and CLI foundation implemented
-- Basic CLI with `--help` and `--version` commands
-- Modular architecture ready for extension
-- Test structure with pytest
+**Phase 2 - Environment & Project Inspection Complete**
+- Deterministic, read-only inspection layer (no LLM, no modifications)
+- Environment inspection: OS, architecture, Python/pip, virtualenv, git, docker
+- Project inspection: layout markers, Python/test files, `.env` files, git status, bounded tree
+- Python source inspection via stdlib AST (file/line counts, top-level imports)
+- `devdoctor diagnose <path>` with human-readable and `--json` output
 
 ## Installation
 
@@ -33,8 +34,11 @@ devdoctor --help
 # Show version
 devdoctor --version
 
-# Diagnose (not yet implemented)
-devdoctor diagnose
+# Diagnose a project (human-readable report)
+devdoctor diagnose ./my-project
+
+# Diagnose with machine-readable JSON output
+devdoctor diagnose ./my-project --json
 
 # Repair (not yet implemented)
 devdoctor repair
