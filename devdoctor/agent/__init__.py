@@ -1,3 +1,12 @@
-"""DevDoctor Agent module - Core agent logic (placeholder for future implementation)."""
+"""DevDoctor Agent - local LLM-powered diagnostic agent."""
 
-__all__ = []
+from devdoctor.agent.core import Agent, AgentConfig, diagnose_with_ai
+from devdoctor.agent.ollama import OllamaClient, OllamaError
+
+__all__ = [
+    "Agent",
+    "AgentConfig",
+    "OllamaClient",
+    "OllamaError",
+    "diagnose_with_ai",
+]
