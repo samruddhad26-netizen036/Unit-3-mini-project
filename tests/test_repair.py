@@ -18,6 +18,7 @@ from devdoctor.agent import (
     get_repair_tool,
     is_valid_repair_action,
     is_within_project,
+    load_repair_plan,
     repair_agent,
     repair_tools,
     validate_package_name,
@@ -452,4 +453,155 @@ def test_report_serialization(tmp_path: Path) -> None:
     agent.report.status = "cancelled"
     payload = json_lib.loads(json_lib.dumps(agent.report.to_dict()))
     assert payload["status"] == "cancelled"
+
+
+# --- deterministic plan-file mode (VS Code bridge) ---
+
+
+def _write_plan(root: Path, payload) -> Path:
+    plan_file = root / "plan.json"
+    if isinstance(payload, str):
+        plan_file.write_text(payload, encoding="utf-8")
+    else:
+        plan_file.write_text(json.dumps(payload), encoding="utf-8")
+    return plan_file
+
+
+def test_load_repair_plan_valid() -> None:
+    """A well-formed plan loads with all fields preserved."""
+    plan = load_repair_plan({
+        "actions": [
+            {"action": "install_package", "package": "pandas",
+             "version": "2.2.3", "reason": "missing"},
+            {"action": "update_requirements", "reason": "sync"},
+        ],
+        "reasoning": "install then sync",
+    })
+    assert len(plan.actions) == 2
+    assert plan.actions[0].package == "pandas"
+    assert plan.actions[0].version == "2.2.3"
+    assert plan.actions[1].action == "update_requirements"
+    assert plan.reasoning == "install then sync"
+
+
+def test_load_repair_plan_rejects() -> None:
+    """Malformed or unsafe plans are rejected with clear errors."""
+    import pytest as pytest_lib
+
+    bad_plans = [
+        ["not", "a", "dict"],
+        {},
+        {"actions": "nope"},
+        {"actions": [{"action": "exec", "package": "x"}]},
+        {"actions": [{"action": "install_package"}]},
+        {"actions": [{"action": "install_package", "package": "a;b"}]},
+        {"actions": [{"action": "install_package", "package": "x", "version": "a;b"}]},
+        {"actions": ["just-a-string"]},
+        {"actions": [{"action": "install_package", "package": "x"}],
+         "reasoning": 42},
+    ]
+    for bad in bad_plans:
+        with pytest_lib.raises(ValueError):
+            load_repair_plan(bad)
+
+
+def test_run_with_plan_dry_run(tmp_path: Path) -> None:
+    """Deterministic dry-run previews without executing or prompting."""
+    root = _project(tmp_path / "p", "pandas==1.0\n")
+    agent = _agent(root, dry_run=True)
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("must not prompt or execute")
+
+    import builtins
+    orig_input = builtins.input
+    builtins.input = _boom
+    try:
+        plan = load_repair_plan({"actions": [
+            {"action": "install_package", "package": "pandas",
+             "version": "2.0", "reason": "x"}]})
+        report = agent.run_with_plan(plan)
+    finally:
+        builtins.input = orig_input
+    assert report.status == "cancelled"
+    assert report.dry_run is True
+    assert report.actions_attempted == []
+    assert (root / "requirements.txt").read_text(encoding="utf-8") == "pandas==1.0\n"
+
+
+def test_run_with_plan_success(tmp_path: Path, monkeypatch) -> None:
+    """Approved deterministic plan executes and verifies."""
+    root = _project(tmp_path / "p", "pandas\n")
+    monkeypatch.setattr(repair_tools, "run_pip_command",
+                        _fake_pip(stdout="pandas==2.2.3\n", returncode=0))
+    agent = _agent(root, auto_approve=True)
+    states = [(10, 3, 2), (13, 0, 0)]
+
+    def _evolving_inspect(path, run_tests=True):
+        if len(states) > 1:
+            passed, failed, issues = states.pop(0)
+        else:
+            passed, failed, issues = states[0]
+        return _FakeInspectResult(passed, failed, issues)
+
+    monkeypatch.setattr(repair_agent, "inspect", _evolving_inspect)
+    plan = load_repair_plan({"actions": [
+        {"action": "install_package", "package": "pandas",
+         "version": "2.2.3", "reason": "missing"}]})
+    report = agent.run_with_plan(plan)
+    assert report.status == "success"
+    assert report.actions_attempted[0].success is True
+
+
+def test_run_with_plan_requires_approval(tmp_path: Path, monkeypatch) -> None:
+    """Without auto-approve, declining cancels without changes."""
+    root = _project(tmp_path / "p", "pandas==1.0\n")
+    agent = _agent(root)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "n")
+    plan = load_repair_plan({"actions": [
+        {"action": "install_package", "package": "pandas", "reason": "x"}]})
+    report = agent.run_with_plan(plan)
+    assert report.status == "cancelled"
+    assert report.actions_attempted == []
+    assert (root / "requirements.txt").read_text(encoding="utf-8") == "pandas==1.0\n"
+
+
+def test_cli_plan_file_requires_yes(tmp_path: Path) -> None:
+    """Plan-file mode refuses to run without explicit approval."""
+    root = _project(tmp_path / "p")
+    plan_file = _write_plan(root, {"actions": [
+        {"action": "install_package", "package": "pandas", "reason": "x"}]})
+    proc = _repair_cli(str(root), "--plan-file", str(plan_file))
+    assert proc.returncode == 1
+    assert "--yes" in proc.stdout
+
+
+def test_cli_plan_file_invalid(tmp_path: Path) -> None:
+    """Invalid plan files fail with a clear error and no changes."""
+    root = _project(tmp_path / "p", "pandas==1.0\n")
+    plan_file = _write_plan(root, {"actions": [
+        {"action": "exec", "package": "rm -rf /", "reason": "evil"}]})
+    proc = _repair_cli(str(root), "--plan-file", str(plan_file), "--yes")
+    assert proc.returncode == 1
+    assert "Error:" in proc.stdout
+    assert (root / "requirements.txt").read_text(encoding="utf-8") == "pandas==1.0\n"
+
+    missing = _repair_cli(str(root), "--plan-file", str(root / "ghost.json"), "--yes")
+    assert missing.returncode == 1
+    assert "Error:" in missing.stdout
+
+
+def test_cli_plan_file_dry_run_json(tmp_path: Path) -> None:
+    """Dry-run with a valid plan emits JSON and modifies nothing."""
+    root = _project(tmp_path / "p", "pandas==1.0\n")
+    plan_file = _write_plan(root, {"actions": [
+        {"action": "install_package", "package": "pandas",
+         "version": "2.2.3", "reason": "missing"}]})
+    proc = _repair_cli(str(root), "--plan-file", str(plan_file), "--dry-run", "--json")
+    assert proc.returncode == 1  # cancelled dry-run is non-zero, like repair CLI
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "cancelled"
+    assert payload["dry_run"] is True
+    assert payload["repair_plan"]["actions"][0]["package"] == "pandas"
+    assert (root / "requirements.txt").read_text(encoding="utf-8") == "pandas==1.0\n"
     assert payload["rollback_performed"] is False

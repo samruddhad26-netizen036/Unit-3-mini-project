@@ -215,3 +215,48 @@ def validate_version(version: str) -> bool:
     import re
     pattern = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._+-]*$")
     return bool(pattern.match(version)) if version else True
+
+
+def load_repair_plan(data: object) -> RepairPlan:
+    """Validate an external repair plan (e.g. from a plan file) and return it.
+
+    Only registry actions with valid package/version values are accepted.
+    Raises ValueError with a clear message for anything else.
+    """
+    # Uniform ValueError contract keeps CLI handling simple (not TypeError).
+    if not isinstance(data, dict):
+        raise ValueError("repair plan must be a JSON object")  # noqa: TRY004
+    raw_actions = data.get("actions")
+    if raw_actions is None:
+        raise ValueError("repair plan must contain an 'actions' list")
+    if not isinstance(raw_actions, list):
+        raise ValueError("repair plan 'actions' must be a list")  # noqa: TRY004
+    actions: list[RepairAction] = []
+    for index, raw in enumerate(raw_actions):
+        if not isinstance(raw, dict):
+            raise ValueError(  # noqa: TRY004
+                f"repair plan action #{index + 1} must be an object")
+        action = RepairAction.from_dict(raw)
+        if not is_valid_repair_action(action.action):
+            raise ValueError(
+                f"repair plan action #{index + 1} uses unknown action: {action.action!r}")
+        if action.action == "update_requirements":
+            actions.append(RepairAction(
+                action=action.action, reason=action.reason, extra=action.extra))
+            continue
+        if not action.package:
+            raise ValueError(
+                f"repair plan action #{index + 1} ({action.action}) needs a package name")
+        if not validate_package_name(action.package):
+            raise ValueError(
+                f"repair plan action #{index + 1} has invalid package name: "
+                f"{action.package!r}")
+        if action.version and not validate_version(action.version):
+            raise ValueError(
+                f"repair plan action #{index + 1} has invalid version: "
+                f"{action.version!r}")
+        actions.append(action)
+    reasoning = data.get("reasoning", "")
+    if reasoning is not None and not isinstance(reasoning, str):
+        raise ValueError("repair plan 'reasoning' must be a string")
+    return RepairPlan(actions=actions, reasoning=reasoning or "")

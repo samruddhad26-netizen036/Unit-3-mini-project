@@ -1,0 +1,76 @@
+{
+  "name": "devdoctor",
+  "displayName": "DevDoctor",
+  "description": "Local-first Python dependency diagnostics and safe repair, powered by the DevDoctor engine. No APIs, no API keys.",
+  "version": "0.1.0",
+  "publisher": "devdoctor",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samruddhad26-netizen036/Unit-3-mini-project.git"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:python",
+    "workspaceContains:**/requirements.txt",
+    "workspaceContains:**/pyproject.toml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "devdoctor.checkDependencies",
+        "title": "DevDoctor: Check Dependencies"
+      },
+      {
+        "command": "devdoctor.installDependencies",
+        "title": "DevDoctor: Review and Install Missing Dependencies"
+      },
+      {
+        "command": "devdoctor.showOutput",
+        "title": "DevDoctor: Show Output"
+      }
+    ],
+    "configuration": {
+      "title": "DevDoctor",
+      "properties": {
+        "devdoctor.pythonExecutable": {
+          "type": "string",
+          "default": "python",
+          "description": "Python executable used to run the DevDoctor engine."
+        },
+        "devdoctor.autoCheckOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically check dependencies when a Python workspace opens (read-only scan; never installs)."
+        },
+        "devdoctor.timeoutSeconds": {
+          "type": "number",
+          "default": 120,
+          "description": "Timeout in seconds for DevDoctor engine invocations."
+        },
+        "devdoctor.runTests": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include pytest execution during dependency checks (slower)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "clean": "node scripts/clean.js",
+    "compile": "npm run clean && tsc -p ./",
+    "test": "npm run compile && node --test out/test/",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/vscode": "^1.138.0",
+    "typescript": "^5.9.0"
+  }
+}

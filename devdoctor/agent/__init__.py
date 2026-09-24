@@ -10,6 +10,7 @@ from devdoctor.agent.repair_models import (
     RepairResult,
     Snapshot,
     VerificationResult,
+    load_repair_plan,
 )
 from devdoctor.agent.repair_tools import (
     REPAIR_TOOL_SCHEMAS,
@@ -38,6 +39,7 @@ __all__ = [
     "get_repair_tool",
     "is_valid_repair_action",
     "is_within_project",
+    "load_repair_plan",
     "run_repair",
     "validate_package_name",
     "validate_version",

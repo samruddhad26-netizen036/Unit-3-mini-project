@@ -81,6 +81,16 @@ def create_parser() -> argparse.ArgumentParser:
         default=3,
         help="Maximum repair cycles (default: 3)",
     )
+    repair_parser.add_argument(
+        "--plan-file",
+        default=None,
+        help="JSON file with a user-approved repair plan (requires --yes)",
+    )
+    repair_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output the repair report as JSON",
+    )
 
     return parser
 
@@ -168,7 +178,27 @@ def _print_ai_diagnosis(result: dict) -> None:
         print()
 
 
-def run_repair(path: str, dry_run: bool = False, auto_approve: bool = False, max_cycles: int = 3) -> int:
+def _load_plan_file(plan_file: str):
+    """Load and validate a user-approved repair plan from a JSON file."""
+    import json
+
+    from devdoctor.agent import load_repair_plan
+
+    try:
+        with open(plan_file, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        raise ValueError(f"plan file not found: {plan_file}")
+    except OSError as exc:
+        raise ValueError(f"cannot read plan file: {exc}")
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"plan file is not valid JSON: {exc}")
+    return load_repair_plan(data)
+
+
+def run_repair(path: str, dry_run: bool = False, auto_approve: bool = False,
+               max_cycles: int = 3, plan_file: str | None = None,
+               as_json: bool = False) -> int:
     """Run AI-powered repair on a project."""
     import os
 
@@ -185,7 +215,38 @@ def run_repair(path: str, dry_run: bool = False, auto_approve: bool = False, max
     )
 
     agent = RepairAgent(path, config)
-    report = agent.run()
+
+    def _fail(message: str) -> int:
+        if as_json:
+            import json
+
+            print(json.dumps({"status": "failed", "error": message}, indent=2))
+        else:
+            print(f"Error: {message}")
+        return 1
+
+    plan = None
+    if plan_file is not None:
+        # Deterministic mode: execute a user-approved plan, no LLM involved.
+        if not auto_approve and not dry_run:
+            return _fail("--plan-file requires --yes (explicit approval) or --dry-run.")
+        try:
+            plan = _load_plan_file(plan_file)
+        except ValueError as exc:
+            return _fail(str(exc))
+
+    if as_json:
+        import contextlib
+        import io
+        import json
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            report = agent.run_with_plan(plan) if plan is not None else agent.run()
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.status == "success" else 1
+
+    report = agent.run_with_plan(plan) if plan is not None else agent.run()
 
     if report.dry_run:
         print("DRY RUN - No changes were made.")
@@ -242,7 +303,9 @@ def main(args: list[str] | None = None) -> int:
                             parsed_args.skip_docker)
 
     if parsed_args.command == "repair":
-        return run_repair(parsed_args.path, parsed_args.dry_run, parsed_args.yes, parsed_args.max_cycles)
+        return run_repair(parsed_args.path, parsed_args.dry_run, parsed_args.yes,
+                          parsed_args.max_cycles, parsed_args.plan_file,
+                          parsed_args.json)
 
     return 0
 

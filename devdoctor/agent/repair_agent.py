@@ -378,6 +378,43 @@ Maximum {self.config.max_repair_cycles} repair cycles."""
             f"Pull it with: ollama pull {want}"
         )
 
+    def run_with_plan(self, plan: RepairPlan) -> RepairReport:
+        """Execute a pre-approved plan without LLM planning (single cycle).
+
+        Used by deterministic callers (e.g. the VS Code extension) that build
+        the plan from diagnostic evidence and obtain user approval themselves.
+        Honors dry-run mode; no LLM re-planning is attempted.
+        """
+        self.report = RepairReport()
+        self.report.repair_plan = plan
+
+        if not plan.actions:
+            self.report.status = "success"  # Nothing to do
+            self.report.initial_diagnosis = self._capture_pre_repair_state()
+            print("No repairs needed.")
+            return self.report
+
+        if self.config.dry_run:
+            # Reuse the confirmation display for a consistent dry-run preview.
+            self._get_user_confirmation(plan)
+            self.report.dry_run = True
+            self.report.status = "cancelled"
+            return self.report
+
+        if not self.config.auto_approve and not self._get_user_confirmation(plan):
+            self.report.status = "cancelled"
+            self._audit("repair_cancelled", status="cancelled",
+                        metadata={"actions": len(plan.actions)})
+            print("Repair cancelled.")
+            return self.report
+
+        self._audit("repair_approved", status="ok",
+                    metadata={"actions": len(plan.actions),
+                              "dry_run": self.config.dry_run})
+        print(f"Executing approved plan ({len(plan.actions)} actions)...")
+        self.run_repair_cycle(plan)
+        return self.report
+
     def run(self) -> RepairReport:
         """Run the full repair workflow."""
         self.report = RepairReport()

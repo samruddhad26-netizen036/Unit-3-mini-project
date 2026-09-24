@@ -8,7 +8,7 @@ DevDoctor is a tool designed to help developers diagnose and fix Python environm
 
 ## Current Status
 
-**Phase 7 - Security + Docker + Audit + Reporting Complete**
+**Phase 8 - VS Code Extension Integration Complete**
 - Deterministic, read-only declared ↔ installed ↔ imported comparison (no LLM)
 - Declared parsing: `requirements.txt`, PEP 621 `pyproject.toml`, `setup.cfg`, static `setup.py`
 - Installed packages via `importlib.metadata`; imports classified stdlib/third-party/local
@@ -63,6 +63,12 @@ devdoctor repair ./my-project
 
 # Repair without prompting (use with caution)
 devdoctor repair ./my-project --yes
+
+# Execute a user-approved plan file without LLM planning (used by the VS Code extension)
+devdoctor repair ./my-project --plan-file plan.json --yes
+
+# Machine-readable repair report
+devdoctor repair ./my-project --plan-file plan.json --yes --json
 ```
 
 ## AI Mode (Phase 5)
@@ -212,6 +218,24 @@ append to `~/.devdoctor/audit.jsonl` (override: `DEVDOCTOR_AUDIT_LOG`;
 disable: `DEVDOCTOR_AUDIT_DISABLED=1`). Records hold timestamp, event,
 project, status, and bounded secret-free metadata only — never secrets,
 `.env` contents, environment variables, or model responses.
+
+## VS Code Extension (Phase 8)
+
+The `extension/` folder contains a VS Code extension that surfaces DevDoctor
+inside the editor. It reuses the Python engine via `diagnose --json` — no
+dependency logic is duplicated in TypeScript.
+
+- **Automatic check**: opening a Python workspace runs a read-only scan and
+  shows missing/undeclared/mismatched dependencies via notification, the
+  Problems panel, and an Output channel. Nothing installs automatically.
+- **Approval first**: `DevDoctor: Review and Install Missing Dependencies`
+  shows every package, version, and reason in a modal dialog. Only an
+  explicit **Install** click proceeds, executing the reviewed plan through
+  the existing controlled repair tools (`repair --plan-file --yes --json`).
+- **Verification**: dependencies are re-scanned afterwards; success or
+  remaining issues are reported, with rollback behavior preserved.
+- **Local-first**: no external APIs, no API keys. See `extension/README.md`
+  for local install/run instructions (`npm install`, `npm test`, F5).
 
 ## Development
 

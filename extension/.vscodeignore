@@ -1,0 +1,14 @@
+{
+  "files": [
+    "out/**/*"
+  ],
+  "exclude": [
+    "**/.git/**",
+    "**/.vscode/**",
+    "**/.vscode-test/**",
+    "**/src/**",
+    "**/.gitignore",
+    "**/.eslintrc*",
+    "**/*.map"
+  ]
+}

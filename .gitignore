@@ -148,3 +148,7 @@ cython_debug/
 # OS
 .DS_Store
 Thumbs.db
+
+# VS Code extension (keep sources + lockfile, ignore deps and build output)
+extension/node_modules/
+extension/out/
