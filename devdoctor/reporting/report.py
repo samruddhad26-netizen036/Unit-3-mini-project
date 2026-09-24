@@ -85,6 +85,8 @@ def format_human(result: InspectionResult) -> str:
     lines.append("")
 
     lines.extend(_format_dependencies(result))
+    lines.append("")
+    lines.extend(_format_tests(result))
 
     if result.errors:
         lines.append("")
@@ -151,3 +153,49 @@ def _format_dependencies(result: InspectionResult) -> list[str]:
 def format_json(result: InspectionResult) -> str:
     """Render the inspection result as indented JSON."""
     return json.dumps(result.to_dict(), indent=2)
+
+
+def _format_tests(result: InspectionResult) -> list[str]:
+    """Render the TESTS section of the human-readable report."""
+    from devdoctor.diagnostics.testing import MAX_HUMAN_FAILURES
+
+    lines: list[str] = ["TESTS", ""]
+    run = result.tests
+    if run is None:
+        lines.append("  No test data.")
+        return lines
+    if run.status == "no-tests":
+        lines.append("  No tests detected.")
+        return lines
+    if run.status == "unavailable":
+        lines.append("  pytest unavailable.")
+        return lines
+    if run.status == "skipped":
+        lines.append(f"  Skipped: {run.skipped or 'no reason given'}")
+        return lines
+    summary = run.result.summary
+    lines.append(f"  Status: {run.status.upper()}")
+    lines.append("")
+    lines.append(f"  Passed: {summary.passed}")
+    lines.append(f"  Failed: {summary.failed}")
+    lines.append(f"  Skipped: {summary.skipped}")
+    lines.append(f"  Errors: {summary.errors}")
+    lines.append(f"  Duration: {summary.duration_s:.2f}s")
+    if run.result.failures:
+        lines.append("")
+        lines.append("  Failures:")
+        lines.append("")
+        for number, failure in enumerate(run.result.failures[:MAX_HUMAN_FAILURES], start=1):
+            lines.append(f"  {number}. {failure.test_id}")
+            lines.append(f"   {failure.failure_type}")
+            for message_line in failure.message.splitlines():
+                lines.append(f"   {message_line.strip()}")
+            lines.append("")
+        omitted = len(run.result.failures) - MAX_HUMAN_FAILURES + run.result.failures_omitted
+        if omitted > 0:
+            lines.append(f"  ... ({omitted} more failures, see JSON output)")
+    if run.result.notes:
+        lines.append("  Notes:")
+        for note in run.result.notes:
+            lines.append(f"    - {note}")
+    return lines

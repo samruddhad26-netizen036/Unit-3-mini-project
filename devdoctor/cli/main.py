@@ -34,18 +34,23 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Output the inspection result as JSON",
     )
+    diagnose_parser.add_argument(
+        "--skip-tests",
+        action="store_true",
+        help="Skip test execution (faster, no subprocess)",
+    )
 
     subparsers.add_parser("repair", help="Repair Python environment issues (not yet implemented)")
 
     return parser
 
 
-def run_diagnose(path: str, as_json: bool) -> int:
+def run_diagnose(path: str, as_json: bool, skip_tests: bool = False) -> int:
     """Run environment + project inspection and print the report."""
     from devdoctor.diagnostics import inspect
     from devdoctor.reporting import format_human, format_json
 
-    result = inspect(path)
+    result = inspect(path, run_tests=not skip_tests)
     if as_json:
         print(format_json(result))
     else:
@@ -65,7 +70,7 @@ def main(args: list[str] | None = None) -> int:
         return 0
 
     if parsed_args.command == "diagnose":
-        return run_diagnose(parsed_args.path, parsed_args.json)
+        return run_diagnose(parsed_args.path, parsed_args.json, parsed_args.skip_tests)
 
     if parsed_args.command == "repair":
         print("Command 'repair' is not yet implemented.")

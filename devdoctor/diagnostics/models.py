@@ -114,6 +114,7 @@ class InspectionResult:
     project: ProjectInfo
     errors: list[str] = field(default_factory=list)
     dependencies: DependencyAnalysis | None = None
+    tests: TestRun | None = None
 
     def to_dict(self) -> dict:
         """Return a JSON-serializable dict."""
@@ -122,6 +123,7 @@ class InspectionResult:
             "project": self.project.to_dict(),
             "errors": self.errors,
             "dependencies": self.dependencies.to_dict() if self.dependencies else None,
+            "tests": self.tests.to_dict() if self.tests else None,
         }
 
 
@@ -203,5 +205,100 @@ class DependencyAnalysis:
             "imports": [i.to_dict() for i in self.imports],
             "issues": [i.to_dict() for i in self.issues],
             "notes": self.notes,
+            "skipped": self.skipped,
+        }
+
+
+@dataclass
+class TestFailure:
+    """Structured evidence for a single failed/errored test (no diagnosis)."""
+
+    test_id: str
+    file: str | None = None
+    line: int | None = None
+    failure_type: str = "unknown"
+    message: str = ""
+    traceback: str = ""
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "test_id": self.test_id,
+            "file": self.file,
+            "line": self.line,
+            "failure_type": self.failure_type,
+            "message": self.message,
+            "traceback": self.traceback,
+        }
+
+
+@dataclass
+class TestSummary:
+    """Aggregate counts and duration for a test run."""
+
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    skipped: int = 0
+    errors: int = 0
+    duration_s: float = 0.0
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "total": self.total,
+            "passed": self.passed,
+            "failed": self.failed,
+            "skipped": self.skipped,
+            "errors": self.errors,
+            "duration_s": self.duration_s,
+        }
+
+
+@dataclass
+class TestResult:
+    """The outcome of test analysis: summary, failures, and notes."""
+
+    summary: TestSummary = field(default_factory=TestSummary)
+    failures: list[TestFailure] = field(default_factory=list)
+    failures_omitted: int = 0
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "summary": self.summary.to_dict(),
+            "failures": [f.to_dict() for f in self.failures],
+            "failures_omitted": self.failures_omitted,
+            "notes": self.notes,
+        }
+
+
+@dataclass
+class TestRun:
+    """Full test execution record: how tests ran plus the result."""
+
+    status: str = "skipped"  # passed | failed | no-tests | unavailable |
+    #                          timeout | error | skipped
+    exit_code: int | None = None
+    command: list[str] = field(default_factory=list)
+    python: str | None = None
+    pytest_version: str | None = None
+    output: str = ""
+    output_truncated: bool = False
+    result: TestResult = field(default_factory=TestResult)
+    skipped: str | None = None
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serializable dict."""
+        return {
+            "status": self.status,
+            "exit_code": self.exit_code,
+            "command": self.command,
+            "python": self.python,
+            "pytest_version": self.pytest_version,
+            "output": self.output,
+            "output_truncated": self.output_truncated,
+            "result": self.result.to_dict(),
             "skipped": self.skipped,
         }

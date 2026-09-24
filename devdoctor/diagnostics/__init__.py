@@ -19,9 +19,14 @@ from devdoctor.diagnostics.models import (
     InstalledDependency,
     ProjectInfo,
     PythonSourceInfo,
+    TestFailure,
+    TestResult,
+    TestRun,
+    TestSummary,
 )
 from devdoctor.diagnostics.project import EXCLUDE_DIRS, KNOWN_FILES, inspect_project
 from devdoctor.diagnostics.source import extract_imports, inspect_python_sources
+from devdoctor.diagnostics.testing import analyze_tests
 
 __all__ = [
     "EXCLUDE_DIRS",
@@ -35,7 +40,12 @@ __all__ = [
     "InstalledDependency",
     "ProjectInfo",
     "PythonSourceInfo",
+    "TestFailure",
+    "TestResult",
+    "TestRun",
+    "TestSummary",
     "analyze_dependencies",
+    "analyze_tests",
     "classify_import",
     "constraint_satisfied",
     "extract_imports",
