@@ -66,8 +66,12 @@ def test_cli_diagnose_json(tmp_path) -> None:
     assert "errors" in payload
 
 
-def test_cli_repair_not_implemented() -> None:
-    """Test repair command shows not implemented message."""
-    result = _run("repair")
+def test_cli_repair_requires_ollama(tmp_path) -> None:
+    """Test repair command fails fast with a clear error when the backend is unusable."""
+    (tmp_path / "app.py").write_text("import os\n", encoding="utf-8")
+    result = _run("repair", str(tmp_path))
     assert result.returncode == 1
-    assert "not yet implemented" in result.stdout
+    combined = result.stdout + result.stderr
+    assert "Ollama" in combined
+    assert "REPAIR REPORT" in result.stdout
+    assert "Status: FAILED" in result.stdout
