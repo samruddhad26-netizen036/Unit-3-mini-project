@@ -40,6 +40,14 @@ export interface EngineProject {
   error: string | null;
 }
 
+export interface EcosystemInfo {
+  ecosystem_id: string;
+  display_name: string;
+  manifests_found: string[];
+  supported: boolean;
+  message: string;
+}
+
 export interface EngineResult {
   environment: Record<string, unknown>;
   project: EngineProject;
@@ -49,6 +57,7 @@ export interface EngineResult {
   security?: unknown;
   vulnerabilities?: unknown;
   docker?: unknown;
+  ecosystems?: EcosystemInfo[];
 }
 
 export interface RepairReportData {

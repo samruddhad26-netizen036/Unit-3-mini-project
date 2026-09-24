@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from devdoctor.diagnostics.dependencies import analyze_dependencies
+from devdoctor.adapters.registry import (
+    DEFAULT_REGISTRY,
+    detect_ecosystems,
+    ensure_builtin_adapters,
+)
 from devdoctor.diagnostics.docker import analyze_docker
 from devdoctor.diagnostics.environment import inspect_environment
 from devdoctor.diagnostics.models import (
@@ -36,10 +40,17 @@ def inspect(path: str | Path, run_tests: bool = True, run_security: bool = True,
         security = SecurityAnalysis(skipped=f"security scan skipped: {reason}")
         vulnerabilities = VulnAnalysis(skipped=f"vulnerability scan skipped: {reason}")
         docker = DockerAnalysis(skipped=f"docker analysis skipped: {reason}")
+        ecosystems = []
     else:
         root = Path(project.path)
-        imports = project.source.imports if project.source else []
-        dependencies = analyze_dependencies(root, project.python_files, imports)
+        ensure_builtin_adapters()
+        ecosystems = detect_ecosystems(root, DEFAULT_REGISTRY)
+        python_adapter = DEFAULT_REGISTRY.get("python")
+        if python_adapter is not None and python_adapter.detect(root):
+            dependencies = python_adapter.analyze_dependencies(root)
+        else:
+            dependencies = DependencyAnalysis(
+                skipped="no supported ecosystem adapter matched this project")
         if run_tests:
             tests = analyze_tests(root, project)
         else:
@@ -58,4 +69,4 @@ def inspect(path: str | Path, run_tests: bool = True, run_security: bool = True,
     return InspectionResult(
         environment=environment, project=project, errors=errors,
         dependencies=dependencies, tests=tests, security=security,
-        vulnerabilities=vulnerabilities, docker=docker)
+        vulnerabilities=vulnerabilities, docker=docker, ecosystems=ecosystems)

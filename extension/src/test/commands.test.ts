@@ -80,6 +80,21 @@ interface DiagnoseData {
     notes: string[];
     skipped: string | null;
   };
+  ecosystems?: Array<{
+    ecosystem_id: string;
+    display_name: string;
+    manifests_found: string[];
+    supported: boolean;
+    message: string;
+  }>;
+}
+
+function withEcosystems(
+  result: { ok: true; data: DiagnoseData },
+  ecosystems: NonNullable<DiagnoseData["ecosystems"]>
+): { ok: true; data: DiagnoseData } {
+  result.data.ecosystems = ecosystems;
+  return result;
 }
 
 function okDiagnose(issues: unknown[] = []): { ok: true; data: DiagnoseData } {
@@ -174,6 +189,83 @@ describe("checkDependencies", () => {
       ctx as never
     );
     assert.ok(mock.calls.some((c) => c.method === "showErrorMessage"));
+  });
+
+  it("informs about unsupported ecosystems without an install flow", async () => {
+    const data = withEcosystems(okDiagnose([]), [
+      {
+        ecosystem_id: "javascript",
+        display_name: "JavaScript/TypeScript",
+        manifests_found: ["package.json"],
+        supported: false,
+        message: "not yet supported",
+      },
+    ]);
+    const { mock, extension, engine, ctx, repairCalls } = setup({
+      diagnoseQueue: [data],
+      repairResult: { ok: true, data: { status: "success" } },
+    });
+    const issues = await extension.checkDependencies(
+      mock.vscode as unknown as typeof vscode,
+      engine as never,
+      ctx as never
+    );
+    assert.deepStrictEqual(issues, []);
+    assert.strictEqual(repairCalls.length, 0);
+    assert.ok(
+      mock.calls.some(
+        (c) =>
+          c.method === "showInformationMessage" &&
+          String(c.args[0]).includes("JavaScript/TypeScript")
+      )
+    );
+    // No misleading "all satisfied" message when other ecosystems exist.
+    assert.ok(
+      !mock.calls.some(
+        (c) =>
+          c.method === "showInformationMessage" &&
+          String(c.args[0]).includes("all dependencies satisfied")
+      )
+    );
+  });
+
+  it("shows mixed supported and unsupported ecosystems separately", async () => {
+    const data = withEcosystems(okDiagnose([issue("missing", "pandas")]), [
+      {
+        ecosystem_id: "python",
+        display_name: "Python/Pip",
+        manifests_found: ["requirements.txt"],
+        supported: true,
+        message: "supported",
+      },
+      {
+        ecosystem_id: "go",
+        display_name: "Go",
+        manifests_found: ["go.mod"],
+        supported: false,
+        message: "not yet supported",
+      },
+    ]);
+    const { mock, extension, engine, ctx, repairCalls, outputLines } = setup({
+      diagnoseQueue: [data],
+      repairResult: { ok: true, data: { status: "success" } },
+    });
+    mock.respondWith.set("showWarningMessage", ["Dismiss"]);
+    const issues = await extension.checkDependencies(
+      mock.vscode as unknown as typeof vscode,
+      engine as never,
+      ctx as never
+    );
+    assert.strictEqual(issues.length, 1);
+    assert.strictEqual(repairCalls.length, 0);
+    assert.ok(
+      mock.calls.some(
+        (c) =>
+          c.method === "showInformationMessage" &&
+          String(c.args[0]).includes("Go (go.mod)")
+      )
+    );
+    assert.ok(outputLines.some((line) => line.includes("Python/Pip")));
   });
 });
 

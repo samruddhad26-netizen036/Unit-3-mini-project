@@ -8,7 +8,7 @@ DevDoctor is a tool designed to help developers diagnose and fix Python environm
 
 ## Current Status
 
-**Phase 8 - VS Code Extension Integration Complete**
+**Phase 9 - Language-Agnostic Adapter Architecture Complete**
 - Deterministic, read-only declared ↔ installed ↔ imported comparison (no LLM)
 - Declared parsing: `requirements.txt`, PEP 621 `pyproject.toml`, `setup.cfg`, static `setup.py`
 - Installed packages via `importlib.metadata`; imports classified stdlib/third-party/local
@@ -218,6 +218,25 @@ append to `~/.devdoctor/audit.jsonl` (override: `DEVDOCTOR_AUDIT_LOG`;
 disable: `DEVDOCTOR_AUDIT_DISABLED=1`). Records hold timestamp, event,
 project, status, and bounded secret-free metadata only — never secrets,
 `.env` contents, environment variables, or model responses.
+
+## Language Adapters (Phase 9)
+
+DevDoctor detects project ecosystems by root-level manifests and routes
+each through a registered adapter (`devdoctor/adapters/`):
+
+SUPPORTED NOW:
+- Python/Pip (`requirements.txt`, `pyproject.toml`, `setup.cfg`, `setup.py`)
+
+DETECTED BUT NOT YET SUPPORTED (reported, never modified or analyzed):
+- JavaScript/TypeScript/npm (`package.json`)
+- Java/Maven/Gradle (`pom.xml`, `build.gradle`, `build.gradle.kts`)
+- Go (`go.mod`)
+- Rust/Cargo (`Cargo.toml`)
+
+Multi-manifest projects report every ecosystem; `diagnose` shows a compact
+ECOSYSTEMS section, and the VS Code extension shows supported results and
+unsupported ecosystems separately. Python behavior is unchanged — the
+adapter reuses the Phase 3/6 implementation without duplication.
 
 ## VS Code Extension (Phase 8)
 

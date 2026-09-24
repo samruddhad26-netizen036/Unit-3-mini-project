@@ -7,6 +7,10 @@ evidence objects that will later be passed to the agentic AI layer.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from devdoctor.adapters.ecosystems import EcosystemResult
 
 
 @dataclass
@@ -118,6 +122,7 @@ class InspectionResult:
     security: SecurityAnalysis | None = None
     vulnerabilities: VulnAnalysis | None = None
     docker: DockerAnalysis | None = None
+    ecosystems: list[EcosystemResult] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Return a JSON-serializable dict."""
@@ -130,6 +135,7 @@ class InspectionResult:
             "security": self.security.to_dict() if self.security else None,
             "vulnerabilities": self.vulnerabilities.to_dict() if self.vulnerabilities else None,
             "docker": self.docker.to_dict() if self.docker else None,
+            "ecosystems": [eco.to_dict() for eco in self.ecosystems],
         }
 
 

@@ -20,6 +20,7 @@ import {
   runRepair as defaultRunRepair,
 } from "./engine";
 import { syncDiagnostics, toProblemEntries } from "./diagnostics";
+import { partitionEcosystems, unsupportedNotice } from "./ecosystems";
 import { buildInstallPlan, planFilePayload, summarizePlan } from "./installPlan";
 import { getVscode } from "./vscodeApi";
 
@@ -98,6 +99,12 @@ export async function checkDependencies(
     return [];
   }
   const issues = data.dependencies?.issues ?? [];
+  const { supported, unsupported } = partitionEcosystems(data.ecosystems);
+  if (supported.length > 0) {
+    ctx.output.appendLine(
+      `DevDoctor: supported ecosystem(s): ${supported.map((s) => s.display_name).join(", ")}.`
+    );
+  }
   syncDiagnostics(
     vscodeApi,
     ctx.diagnostics,
@@ -120,8 +127,13 @@ export async function checkDependencies(
     if (choice === "Review and Install") {
       await installDependencies(vscodeApi, engine, ctx);
     }
-  } else if (issues.length === 0) {
+  } else if (issues.length === 0 && unsupported.length === 0) {
     await vscodeApi.window.showInformationMessage("DevDoctor: all dependencies satisfied.");
+  }
+  const notice = unsupportedNotice(unsupported);
+  if (notice) {
+    ctx.output.appendLine(`DevDoctor: ${notice}`);
+    await vscodeApi.window.showInformationMessage(`DevDoctor: ${notice}`);
   }
   return issues;
 }

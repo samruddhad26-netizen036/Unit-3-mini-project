@@ -144,6 +144,47 @@ class VerificationResult:
         }
 
 
+def compare_dependency_states(before: dict[str, Any], after: dict[str, Any]) -> VerificationResult:
+    """Compare pre/post-repair diagnostic states (shared verification logic).
+
+    Both states use InspectionResult.to_dict() shape. Success requires strict
+    improvement: fewer test failures, more passing tests, or fewer
+    dependency issues. Identical state is not success.
+    """
+    tests_before = before.get("tests", {}).get("result", {}).get("summary", {})
+    tests_after = after.get("tests", {}).get("result", {}).get("summary", {})
+    deps_before = before.get("dependencies", {})
+    deps_after = after.get("dependencies", {})
+
+    passed_before = tests_before.get("passed", 0)
+    failed_before = tests_before.get("failed", 0)
+    passed_after = tests_after.get("passed", 0)
+    failed_after = tests_after.get("failed", 0)
+
+    issues_before = len(deps_before.get("issues", []))
+    issues_after = len(deps_after.get("issues", []))
+
+    test_improved = failed_after < failed_before or passed_after > passed_before
+    deps_improved = issues_after < issues_before
+    success = test_improved or deps_improved
+
+    message_parts = []
+    if test_improved:
+        message_parts.append(
+            f"Tests: {passed_before}P/{failed_before}F -> {passed_after}P/{failed_after}F")
+    if deps_improved:
+        message_parts.append(f"Dependency issues: {issues_before} -> {issues_after}")
+    if not success:
+        message_parts.append("No improvement detected")
+
+    return VerificationResult(
+        success=success,
+        before={"tests": tests_before, "dependency_issues": issues_before},
+        after={"tests": tests_after, "dependency_issues": issues_after},
+        message="; ".join(message_parts) if message_parts else "No significant change",
+    )
+
+
 @dataclass
 class RepairReport:
     """Complete repair report including all phases."""

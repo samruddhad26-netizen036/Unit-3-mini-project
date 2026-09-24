@@ -92,6 +92,14 @@ npm install     # dev dependencies
 npm test        # type-check (tsc) + unit tests (node:test, mocked vscode API)
 ```
 
+## Multi-ecosystem workspaces (Phase 9)
+
+`diagnose --json` now reports every detected ecosystem. The extension keeps
+the full Python workflow, and additionally shows an informational message
+for detected-but-unsupported ecosystems (JavaScript/TypeScript, Java, Go,
+Rust) — supported and unsupported results are displayed separately, and no
+install flow is offered for unsupported ecosystems.
+
 Unit tests live in `src/test/` and run against compiled output in `out/`.
 The `vscode` module is injected via `src/vscodeApi.ts`, so tests run with
 plain `node --test` — no VS Code download required. For full UI testing,

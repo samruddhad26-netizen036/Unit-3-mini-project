@@ -84,6 +84,8 @@ def format_human(result: InspectionResult) -> str:
         lines.append("  (empty)")
     lines.append("")
 
+    lines.extend(_format_ecosystems(result))
+    lines.append("")
     lines.extend(_format_dependencies(result))
     lines.append("")
     lines.extend(_format_tests(result))
@@ -118,6 +120,21 @@ _ISSUE_ORDER = [
     "version-mismatch",
     "possibly-unused",
 ]
+
+
+def _format_ecosystems(result: InspectionResult) -> list[str]:
+    """Render the ECOSYSTEMS section of the human-readable report."""
+    lines: list[str] = ["ECOSYSTEMS", ""]
+    if not result.ecosystems:
+        lines.append("  No recognized ecosystems.")
+        return lines
+    for eco in result.ecosystems:
+        manifests = f" ({', '.join(eco.manifests_found)})" if eco.manifests_found else ""
+        if eco.supported:
+            lines.append(f"  {eco.display_name}: supported{manifests}")
+        else:
+            lines.append(f"  {eco.display_name}: detected but not yet supported{manifests}")
+    return lines
 
 
 def _format_dependencies(result: InspectionResult) -> list[str]:
